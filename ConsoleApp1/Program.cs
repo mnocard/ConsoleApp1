@@ -1,115 +1,132 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Management;
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Unicode;
 
 namespace ConsoleApp1
 {
     class Program
     {
-        static void Main(string[] args)
+        static void Main()
         {
-
-            Console.WriteLine("Введите имя пользователя и нажмите клавишу Enter:");
-            string result = Console.ReadLine();
-            string path = Directory.GetCurrentDirectory() + "\\config.txt";
-            string destinationath;
-
-            if (File.Exists(path))
-            {
-                var temp = File.ReadAllLines(path);
-                destinationath = temp[0];
-            }
-            else
-            {
-                Console.WriteLine("Отсутствует файл конфигурации, содержащий целевой путь сохранения данных.");
-                return;
-            }
-
-            ComputerInfo computerInfo = new ComputerInfo();
-
-            Console.WriteLine("Имя машины  -  " + Environment.MachineName);
-            Console.WriteLine("Имя пользователя  -  " + Environment.UserName);
-
-            computerInfo.CurrentName = "Введенное пользователем имя";
-            computerInfo.CurrentNameContent = result;
-
-            computerInfo.MachineName = "Имя машины";
-            computerInfo.MachineNameContent = Environment.MachineName;
-            computerInfo.UserName = "Имя пользователя";
-            computerInfo.UserNameContent = Environment.UserName;
-
-            System.Xml.Serialization.XmlSerializer writer = new System.Xml.Serialization.XmlSerializer(typeof(ComputerInfo));
-
-            destinationath = destinationath + result + ".xml";
-            FileStream file = File.Create(destinationath);
-
-            writer.Serialize(file, computerInfo);
-            file.Close();
+            string settingsPath = Directory.GetCurrentDirectory() + "\\config.txt";
+            string destinationPath = "";
 
             try
             {
-                ManagementObjectSearcher myProcessorObject = new ManagementObjectSearcher("select * from Win32_Processor");
+                if (!File.Exists(settingsPath)) throw new FileNotFoundException();
 
-                foreach (ManagementObject obj in myProcessorObject.Get())
-                {
-                    Console.WriteLine("Процессор  -  " + obj["Name"]);
-                    result += "\nПроцессор  -  " + obj["Name"];
-                }
+                destinationPath = File.ReadAllLines(settingsPath)[0];
 
-                ManagementObjectSearcher myVideoObject = new ManagementObjectSearcher("select * from Win32_VideoController");
+                if (!Directory.Exists(destinationPath)) throw new DirectoryNotFoundException();
 
-                foreach (ManagementObject obj in myVideoObject.Get())
-                {
-                    Console.WriteLine("Видеокарта  -  " + obj["Name"]);
-                    result += "\nВидеокарта  -  " + obj["Name"];
-                }
+                Console.WriteLine("Введите имя пользователя и нажмите клавишу Enter:");
+                var userName = Console.ReadLine();
 
-                ManagementObjectSearcher myOperativeSystemObject = new ManagementObjectSearcher("select * from Win32_OperatingSystem");
+                var data = GetData(userName);
 
-                foreach (ManagementObject obj in myOperativeSystemObject.Get())
-                {
-                    Console.WriteLine("Операционная система  -  " + obj["Caption"]);
-                    Console.WriteLine("Версия ОС  -  " + obj["Version"]);
-                    result += "\nОперационная система  -  " + obj["Caption"];
-                    result += "\nВерсия ОС  -" + obj["Version"];
-                }
-
-                ManagementObjectSearcher searcher = new ManagementObjectSearcher("SELECT Capacity FROM Win32_PhysicalMemory");
-                UInt64 Capacity = 0;
-                foreach (ManagementObject WniPART in searcher.Get())
-                {
-                    Capacity += Convert.ToUInt64(WniPART.Properties["Capacity"].Value);
-                    Console.WriteLine("Установленная оперативка  -  " + Capacity / 1024 / 1024);
-                    result += "\nУстановленная оперативка  -  " + Capacity / 1024 / 1024;
-                }
-
-                ManagementObjectSearcher baseboardSearcher = new ManagementObjectSearcher("root\\CIMV2", "SELECT * FROM Win32_BaseBoard");
-
-                foreach (ManagementObject queryObj in baseboardSearcher.Get())
-                {
-                    Console.WriteLine("Материнка  -  " + queryObj["Manufacturer"].ToString() + " " + queryObj["Product"].ToString() + " " + queryObj["SerialNumber"].ToString());
-                    result += "\nМатеринка  -  " + queryObj["Manufacturer"].ToString() + " " + queryObj["Product"].ToString() + " " + queryObj["SerialNumber"].ToString();
-                }
-
-                var host = Dns.GetHostEntry(Dns.GetHostName());
-
-                foreach (var ip in host.AddressList)
-                {
-                    if (ip.AddressFamily == AddressFamily.InterNetwork)
-                    {
-                        Console.WriteLine("IP  -  " + ip.ToString());
-                        result += "\nIP  -  " + ip.ToString();
-                    }
-                }
+                SaveData(data, $"{destinationPath}\\{userName} - {DateTime.Now.ToString("d")}.json");
+            }
+            catch (DirectoryNotFoundException)
+            {
+                ErrorHandler($"\nНевозможно получить доступ к папке, указанной в файле конфигурации \"config.txt\":\n{destinationPath}");
+            }
+            catch (FileNotFoundException)
+            {
+                ErrorHandler($"\nОтсутствует файл конфигурации \"config.txt\", содержащий целевой путь сохранения данных.");
             }
             catch (Exception e)
             {
-                result += "Непредвиденная ошибка!\n" + e.Message;
+                ErrorHandler($"\nНепредвиденная ошибка!\n{e.Message}");
             }
 
             Console.ReadKey();
+        }
+
+        private static void ErrorHandler(string result)
+        {
+            Console.WriteLine(result);
+            File.AppendAllText(Directory.GetCurrentDirectory() + "\\error.txt", DateTime.Now.ToString() + result);
+        }
+
+        private static void SaveData(Dictionary<string, string> dict, string destinationath)
+        {
+            byte[] jsonUtf8Bytes;
+
+            var options = new JsonSerializerOptions
+            {
+                Encoder = JavaScriptEncoder.Create(UnicodeRanges.BasicLatin, UnicodeRanges.Cyrillic),
+                WriteIndented = true
+            };
+
+            jsonUtf8Bytes = JsonSerializer.SerializeToUtf8Bytes(dict, options);
+
+            File.WriteAllBytes(destinationath, jsonUtf8Bytes);
+
+            Console.WriteLine("Данные успешно сохранены.");
+        }
+
+        private static Dictionary<string, string> GetData(string result)
+        {
+            var dict = new Dictionary<string, string>();
+
+            dict.Add("Введенное пользователем имя", result);
+            dict.Add("Имя машины", Environment.MachineName);
+            dict.Add("Имя пользователя", Environment.UserName);
+
+            ManagementObjectSearcher myProcessorObject = new ManagementObjectSearcher("select * from Win32_Processor");
+            foreach (ManagementObject obj in myProcessorObject.Get())
+            {
+                dict.Add("Процессор", obj["Name"].ToString());
+            }
+
+            ManagementObjectSearcher myVideoObject = new ManagementObjectSearcher("select * from Win32_VideoController");
+            foreach (ManagementObject obj in myVideoObject.Get())
+            {
+                dict.Add("Видеокарта", obj["Name"].ToString());
+            }
+
+            ManagementObjectSearcher myOperativeSystemObject = new ManagementObjectSearcher("select * from Win32_OperatingSystem");
+            foreach (ManagementObject obj in myOperativeSystemObject.Get())
+            {
+                dict.Add("Операционная система", obj["Caption"].ToString());
+                dict.Add("Версия ОС", obj["Version"].ToString());
+            }
+
+            ManagementObjectSearcher searcher = new ManagementObjectSearcher("SELECT Capacity FROM Win32_PhysicalMemory");
+            //UInt64 Capacity = 0;
+            foreach (ManagementObject WniPART in searcher.Get())
+            {
+                UInt64 Capacity = Convert.ToUInt64(WniPART.Properties["Capacity"].Value);
+                dict.Add("Установленная оперативка", (Capacity / 1024 / 1024).ToString());
+            }
+
+            ManagementObjectSearcher baseboardSearcher = new ManagementObjectSearcher("root\\CIMV2", "SELECT * FROM Win32_BaseBoard");
+
+            foreach (ManagementObject queryObj in baseboardSearcher.Get())
+            {
+                dict.Add("Материнка", queryObj["Manufacturer"].ToString() + " " + queryObj["Product"].ToString() + " " + queryObj["SerialNumber"].ToString());
+            }
+
+            var host = Dns.GetHostEntry(Dns.GetHostName());
+            var i = 1;
+            foreach (var ip in host.AddressList)
+            {
+                if (ip.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    dict.Add("IP адрес " + i, ip.ToString());
+                    i++;
+                }
+            }
+
+            Console.WriteLine("Данные успешно собраны.");
+
+            return dict;
         }
     }
 }
