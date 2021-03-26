@@ -14,6 +14,8 @@ namespace ConsoleApp1
     {
         static void Main()
         {
+            // Файл, в котором лежит путь, куда сохранять данные, должен лежать в папке с программой и называться config.txt
+            // Путь должен быть записан в этом файле первой строкой, слэша (\) в конце не надо
             string settingsPath = Directory.GetCurrentDirectory() + "\\config.txt";
             string destinationPath = "";
 
@@ -30,7 +32,7 @@ namespace ConsoleApp1
 
                 var data = GetData(userName);
 
-                SaveData(data, $"{destinationPath}\\{userName} - {DateTime.Now.ToString("d")}.json");
+                SaveDataToJson(data, $"{destinationPath}\\{userName} - {DateTime.Now.ToString("d")}.json");
             }
             catch (DirectoryNotFoundException)
             {
@@ -48,13 +50,22 @@ namespace ConsoleApp1
             Console.ReadKey();
         }
 
+        /// <summary>
+        /// Обработчик ошибок. Выводит текст ошибки в консоль и дописывает его в файл errors.txt в папке с программой
+        /// </summary>
+        /// <param name="result">Текст ошибки</param>
         private static void ErrorHandler(string result)
         {
             Console.WriteLine(result);
             File.AppendAllText(Directory.GetCurrentDirectory() + "\\error.txt", DateTime.Now.ToString() + result);
         }
 
-        private static void SaveData(Dictionary<string, string> dict, string destinationath)
+        /// <summary>
+        /// Сохраняет полученный словарь данных в Json-файл по указанному пути.
+        /// </summary>
+        /// <param name="dict">Словарь записываемых данных</param>
+        /// <param name="destinationath">Путь, по которому должен быть сохранён, файл. Должен представлять полный путь с названием файла и расширением .json</param>
+        private static void SaveDataToJson(Dictionary<string, string> dict, string destinationath)
         {
             byte[] jsonUtf8Bytes;
 
@@ -71,6 +82,11 @@ namespace ConsoleApp1
             Console.WriteLine("Данные успешно сохранены.");
         }
 
+        /// <summary>
+        /// Получает данные о компьютере и возвращает их в виде словаря "ключ-значение"
+        /// </summary>
+        /// <param name="result">Словарь данных о компьютере</param>
+        /// <returns></returns>
         private static Dictionary<string, string> GetData(string result)
         {
             var dict = new Dictionary<string, string>();
